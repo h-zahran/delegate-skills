@@ -59,6 +59,12 @@ Summarize installed vs missing, auth (`true` / `false` / `null` = unknown), and 
 `reported`, `aliases` (curated aliases in the registry, not live discovery — full model names also
 work), `unsupported`, or `failed`.
 
+ZCode is the one entry whose models come from a file rather than a command, because its CLI has no
+`models` subcommand. Its `values` are qualified `provider/model` ids and its `models` carries an
+extra `providers: [ { name, kind, baseURL } ]` — the routing `zcode-delegate`'s `--model` needs. Its
+config also holds API keys; discovery never reads them, and a malformed file reports `failed` rather
+than any of its bytes. `model` is still not a lane dial for `zcode`: the choice is per dispatch.
+
 ### 2. Load existing (effective map)
 
 ```bash

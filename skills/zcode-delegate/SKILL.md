@@ -100,6 +100,18 @@ ZCode has no `--model` flag. It reads the model from its own config file, whose 
 the process home directory. So `--model` on this relay generates a config that pins one provider and
 model, writes it into a home directory belonging to the run, and points the ZCode child at that home.
 
+**To offer the user a choice, list what they have first.** `delegate-setup`'s discovery reports
+ZCode's catalogue — every `provider/model` id, plus each provider's `kind` and `baseURL`, which is
+exactly what the three flags below need:
+
+```bash
+node "<delegate-setup-dir>/scripts/discover.mjs"   # zcode entry: models.values + models.providers
+```
+
+It reads ZCode's own config because ZCode has no `models` command, and it lifts routing and ids
+only — the API keys in that file are never read. Present the list, take the user's pick, then
+dispatch with it.
+
 Pass all three flags together — the generated provider block needs the endpoint and the kind as much
 as the id, and the relay cannot discover them:
 
