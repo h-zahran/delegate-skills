@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const capturedEnv = () => Object.fromEntries(
-  ["PATH", "HOME", "SMOKE_PROVIDER_TOKEN", "SMOKE_SECRET_TOKEN"]
+  ["PATH", "HOME", "USERPROFILE", "SMOKE_PROVIDER_TOKEN", "SMOKE_SECRET_TOKEN"]
     .filter((key) => process.env[key] !== undefined)
     .map((key) => [key, process.env[key]]),
 );
