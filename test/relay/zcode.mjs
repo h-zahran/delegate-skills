@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export async function runZcode(h) {
@@ -225,9 +225,17 @@ export async function runZcode(h) {
   });
   h.check("zcode model: a complete triple dispatches", modelRun.status === 0);
 
-  const generatedConfig = join(modelOutDir, "zcode-home", ".zcode", "cli", "config.json");
-  h.check("zcode model: the generated config lands in a per-run home",
-    existsSync(generatedConfig));
+  // The home is deliberately outside --out-dir: it becomes live ZCode state
+  // (session db, logs, plugin cache) and --out-dir can point into the repo under
+  // review. result.json names it, which is how the test finds it.
+  const modelResult = existsSync(join(modelOutDir, "result.json")) ? h.result(modelOutDir) : {};
+  const generatedHome = modelResult.modelHome ?? "";
+  const generatedConfig = join(generatedHome, ".zcode", "cli", "config.json");
+  h.check("zcode model: the generated config lands in a per-run home outside the out-dir",
+    generatedHome !== "" &&
+    existsSync(generatedConfig) &&
+    !existsSync(join(modelOutDir, "zcode-home")) &&
+    !generatedHome.startsWith(modelOutDir));
   if (existsSync(generatedConfig)) {
     const raw = readFileSync(generatedConfig, "utf8");
     const parsed = JSON.parse(raw);
@@ -247,15 +255,49 @@ export async function runZcode(h) {
   }
 
   const childEnvSeen = existsSync(modelEnvFile) ? JSON.parse(readFileSync(modelEnvFile, "utf8")) : {};
-  const expectedHome = join(modelOutDir, "zcode-home");
   h.check("zcode model: the child's home is repointed on both platform variables",
-    childEnvSeen.HOME === expectedHome && childEnvSeen.USERPROFILE === expectedHome);
+    generatedHome !== "" &&
+    childEnvSeen.HOME === generatedHome &&
+    childEnvSeen.USERPROFILE === generatedHome);
 
-  if (existsSync(join(modelOutDir, "result.json"))) {
-    const value = h.result(modelOutDir);
-    h.check("zcode model: the pinned model and its home are recorded in the result",
-      value.model === "openrouter/z-ai/glm-5.2:free" && value.modelHome === expectedHome);
-  }
+  h.check("zcode model: the pinned model and its home are recorded in the result",
+    modelResult.model === "openrouter/z-ai/glm-5.2:free" && typeof modelResult.modelHome === "string");
+
+  // Regression: the generated home used to live under --out-dir, so a --model
+  // --read-only run with --out-dir inside the repo filled the worktree with
+  // ZCode's session store and the tripwire reported a violation ZCode had not
+  // caused. The fake writes under the home to stand in for that state.
+  const tripRepo = h.freshRepo("work-zcode-model-tripwire");
+  // freshRepo leaves an empty repository. Commit one file so the tripwire has a
+  // committed baseline: with nothing committed its honest answer is null
+  // ("cannot tell"), and this case is about distinguishing false from true.
+  writeFileSync(join(tripRepo, "tracked.txt"), "committed baseline\n");
+  spawnSync("git", ["-C", tripRepo, "add", "-A"], { encoding: "utf8" });
+  spawnSync("git", [
+    "-C", tripRepo, "-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke",
+    "commit", "-qm", "baseline",
+  ], { encoding: "utf8" });
+  const tripOutDir = join(tripRepo, "relay-run");
+  const tripRun = spawnSync(process.execPath, [
+    h.relayPath("zcode"), "--brief", h.briefPath, "--cd", tripRepo,
+    "--out-dir", tripOutDir, "--read-only", ...modelTriple,
+  ], {
+    env: {
+      ...h.baseEnv, ...modelKeyEnv,
+      SMOKE_MODE: "zcode-success",
+      SMOKE_ARGS_FILE: join(h.scratch, "args-model-tripwire-zcode"),
+      // Written inside the generated home, exactly where ZCode puts its session store.
+      SMOKE_WRITE_IN_HOME: "zcode-session-store.sqlite",
+    },
+    encoding: "utf8",
+  });
+  const tripValue = existsSync(join(tripOutDir, "result.json")) ? h.result(tripOutDir) : {};
+  // touchedFiles still lists the out-dir when it sits inside the repo: it is the
+  // raw porcelain review aid, documented as such. Only the verdict must be right.
+  h.check("zcode model: relay-owned home state does not trip the read-only tripwire",
+    tripRun.status === 0 &&
+    tripValue.readOnlyViolation === false &&
+    !existsSync(join(tripOutDir, "zcode-home")));
 
   const plainOutDir = join(h.scratch, "out-model-absent-zcode");
   spawnSync(process.execPath, [

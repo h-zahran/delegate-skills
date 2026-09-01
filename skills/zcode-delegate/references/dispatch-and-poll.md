@@ -48,9 +48,18 @@ If no CLI is found — including when you name one explicitly that does not exis
 
 ZCode has no `--model` flag; it reads the model from `~/.zcode/cli/config.json`, and it derives that
 path from the process home directory. So the relay generates a config under
-`<out-dir>/zcode-home/.zcode/cli/config.json` pinning the named provider and model, and launches the
-ZCode child with `HOME` and `USERPROFILE` both set to `<out-dir>/zcode-home` — both, because
-`os.homedir()` reads a different one per platform. The relay's own environment is untouched.
+`<home>/.zcode/cli/config.json` pinning the named provider and model, and launches the ZCode child
+with `HOME` and `USERPROFILE` both set to that home — both, because `os.homedir()` reads a different
+one per platform. The relay's own environment is untouched.
+
+That home is a fresh directory under the **system temp dir**, not under `--out-dir`, and
+`result.json` records it as `modelHome`. It is deliberately outside the repository: ZCode fills a
+home with live state — a session database, logs, a plugin cache — and `--out-dir` can point into the
+repo under review. The read-only tripwire cannot exclude a tree whose contents do not exist until
+the run creates them, since git collapses an untracked directory into a single entry and the
+exclusion list matches whole paths. Keeping the home out of the repository is what makes a
+`--model --read-only` run report `readOnlyViolation: false` instead of accusing ZCode of writes it
+never made.
 
 The generated provider block carries `kind`, `baseURL`, and `apiKeyRequired`, and no `apiKey`. The
 key comes from the environment, which is what keeps this relay's promise that it reads and writes no

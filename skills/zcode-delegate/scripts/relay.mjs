@@ -45,8 +45,10 @@
  *   --model <provider/model>  Pin one provider and model for this run, e.g.
  *                           openrouter/z-ai/glm-5.2:free. Requires --model-base-url
  *                           and --model-kind. ZCode has no --model flag, so the relay
- *                           generates a config in a per-run home and points the child
- *                           there; the API key is NOT written, it must be in the
+ *                           generates a config in a per-run home under the system temp
+ *                           dir and points the child there (a home fills with live
+ *                           ZCode state, so it must not land in the repo under
+ *                           review); the API key is NOT written, it must be in the
  *                           environment (<PROVIDER>_API_KEY or ZCODE_API_KEY). Cannot
  *                           be combined with --session or --resume-last, because that
  *                           per-run home takes ZCode's session store with it.
@@ -88,7 +90,7 @@
  */
 
 import {spawn, execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, renameSync, readFileSync, readdirSync, existsSync, appendFileSync, statSync, readlinkSync, lstatSync, openSync, readSync, closeSync, realpathSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, renameSync, readFileSync, readdirSync, existsSync, appendFileSync, statSync, readlinkSync, lstatSync, openSync, readSync, closeSync, realpathSync } from "node:fs";
 import {join, resolve, basename, dirname, sep, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants, tmpdir, homedir } from "node:os";
@@ -834,7 +836,7 @@ function prepareRunDir(opts, brief) {
     resultPath: join(outDir, "result.json"),
   };
   writeFileSync(run.briefPath, brief, "utf8");
-  if (opts.model) run.modelHome = writeModelHome(outDir, opts);
+  if (opts.model) run.modelHome = writeModelHome(opts);
   return run;
 }
 
@@ -843,11 +845,19 @@ function prepareRunDir(opts, brief) {
  * this run's own. Returns the directory to hand the child as its home.
  *
  * The provider block carries `kind`, `baseURL`, and `apiKeyRequired` and NOTHING
- * else: no `apiKey` field is written, so the file is safe to leave beside the
- * other run artifacts. ZCode falls back to the environment for the key.
+ * else: no `apiKey` field is written. ZCode falls back to the environment for
+ * the key.
+ *
+ * Deliberately NOT under --out-dir. A home is live ZCode state, not an artifact:
+ * the run fills it with a session database, logs, and a plugin cache. --out-dir
+ * can point into the repository under review, and the read-only tripwire cannot
+ * exclude a tree whose contents are unknown until the run creates them — git
+ * collapses the whole directory into one untracked entry, and the relay's
+ * exclusion list matches whole paths. Writing outside the repository keeps that
+ * state where no tripwire, diff, or `touchedFiles` report can see it.
  */
-function writeModelHome(outDir, opts) {
-  const home = join(outDir, "zcode-home");
+function writeModelHome(opts) {
+  const home = mkdtempSync(join(tmpdir(), "delegate-zcode-home-"));
   const configDir = join(home, ".zcode", "cli");
   mkdirSync(configDir, { recursive: true });
   const config = {

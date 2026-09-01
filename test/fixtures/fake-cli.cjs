@@ -53,6 +53,14 @@ if (process.env.SMOKE_MODE === "capture") {
 if (process.env.SMOKE_WRITE_FILE) {
   fs.writeFileSync(process.env.SMOKE_WRITE_FILE, "written by fake cli\n");
 }
+// Writes into the home the relay handed this child, whose path the caller cannot
+// know in advance. Stands in for a CLI that keeps live state under its own home.
+if (process.env.SMOKE_WRITE_IN_HOME && process.env.HOME) {
+  fs.writeFileSync(
+    require("node:path").join(process.env.HOME, process.env.SMOKE_WRITE_IN_HOME),
+    "home-local state written by fake cli\n",
+  );
+}
 if (process.env.SMOKE_APPEND_INVALID_UTF8) {
   fs.appendFileSync(Buffer.from(process.env.SMOKE_APPEND_INVALID_UTF8, "hex"), "appended by fake cli\n");
 }
