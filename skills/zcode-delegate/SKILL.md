@@ -108,9 +108,10 @@ exactly what the three flags below need:
 node "<delegate-setup-dir>/scripts/discover.mjs"   # zcode entry: models.values + models.providers
 ```
 
-It reads ZCode's own config because ZCode has no `models` command, and it lifts routing and ids
-only — the API keys in that file are never read. Present the list, take the user's pick, then
-dispatch with it.
+That listing comes from ZCode's own config file, because ZCode has no `models` subcommand. Note what
+that costs: the file also holds API keys, so `delegate-setup` loads them into its process, and only
+the routing and the ids leave its parser. **This relay never opens that file** — the three flags
+below are why. Present the list, take the user's pick, then dispatch with it.
 
 Pass all three flags together — the generated provider block needs the endpoint and the kind as much
 as the id, and the relay cannot discover them:

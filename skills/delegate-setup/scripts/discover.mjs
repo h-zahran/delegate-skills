@@ -44,8 +44,9 @@ models.status is reported | aliases | unsupported | failed
 For zcode, models.values are qualified "provider/model" ids read from ZCode's own CLI
 config — the only offline listing, since ZCode has no models subcommand — and models
 carries an extra "providers": [ { name, kind, baseURL } ]. That routing is what
-zcode-delegate's --model needs alongside the id. The config also holds API keys; they
-are never read, and a malformed file reports "failed" rather than any of its bytes.
+zcode-delegate's --model needs alongside the id. Be aware that this file also holds API
+keys: reading it loads them into this process, and only the fields above leave the
+parser. A malformed file reports "failed" rather than any of its bytes.
 
 --usage adds "usage" to each discovered entry:
   { "sessions": <int>, "lastUsed": <ISO-8601 | null> }, or null when no usage probe
@@ -325,11 +326,19 @@ function parseModelCache(raw) {
  * Parses the "zcode-config" file shape: ZCode's own CLI config, which is the
  * only offline listing of the models it can reach.
  *
- * That file also holds API keys, so only two things leave this parser — the
+ * That file also holds API keys. Say the cost plainly rather than around it:
+ * reading it loads those keys into this process, and the containment is in what
+ * leaves the parser, not in what enters it. Two things leave — the
  * `provider/model` identifiers, and each provider's routing (`kind` and
  * `baseURL`), which is what zcode-delegate's --model needs alongside the id.
- * `options.apiKey` is never read, and a parse failure returns the same empty
- * "failed" result as a missing file: no bytes of the file reach a caller.
+ * `options.apiKey` is never dereferenced, so no code path can carry a key into a
+ * result, and a parse failure returns the same empty "failed" result as a
+ * missing file, so no bytes of it reach a caller either.
+ *
+ * There is no credential-free alternative: ZCode has no `models` subcommand, and
+ * `zcode doctor` reports only runtime and packaging facts. If the utility trust
+ * line is read to forbid opening the file at all, the answer is to drop this
+ * probe rather than to soften the wording.
  */
 function parseZcodeConfig(raw) {
   let parsed;
